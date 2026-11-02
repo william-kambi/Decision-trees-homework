@@ -1,96 +1,61 @@
-Module 6 homework.
-Question 1
-Let's train a decision tree regressor to predict the fuel_efficiency_mpg variable.
+# ML Zoomcamp 2026: Homework 6 (Decision Trees, Random Forests, XGBoost)
 
-Train a model with max_depth=1.
-Which original feature is used for splitting the data? If you use DictVectorizer, map a one-hot feature such as origin=USA back to its original column name.
+Solutions to Homework 6 of [DataTalksClub's Machine Learning Zoomcamp](https://github.com/DataTalksClub/machine-learning-zoomcamp) (2026 cohort).
 
-'vehicle_weight'
-'model_year'
-'origin'
-'fuel_type'
-Question 2
-Train a random forest regressor with these parameters:
+The goal is to predict car fuel efficiency (`fuel_efficiency_mpg`) with tree-based regression models and compare how hyperparameters affect validation RMSE.
 
-n_estimators=10
-random_state=1
-n_jobs=-1 (optional - to make training faster)
-What's the RMSE of this model on the validation data?
+## Dataset
 
-0.1837
-1.837
-18.37
-183.7
-Question 3
-Now let's experiment with the n_estimators parameter
+[`car_fuel_efficiency_2026.csv`](https://raw.githubusercontent.com/DataTalksClub/machine-learning-zoomcamp/main/cohorts/2026/data/car_fuel_efficiency_2026.csv) (about 10,000 rows).
 
-Try these values of this parameter: [10, 50, 100, 150].
-Set random_state to 1.
-Evaluate the model on the validation dataset.
-Which value gives the lowest validation RMSE? Consider 3 decimal places for calculating the answer.
+```bash
+wget https://raw.githubusercontent.com/DataTalksClub/machine-learning-zoomcamp/main/cohorts/2026/data/car_fuel_efficiency_2026.csv
+```
 
-10
-50
-100
-150
-Question 4
-Let's select the best max_depth:
+## Setup
 
-Try different values of max_depth: [10, 15, 20, 25]
-For each of these values,
-try different values of n_estimators from [10, 50, 100, 150]
-calculate the mean RMSE
-Fix the random seed: random_state=1
-What's the best max_depth, using the mean RMSE?
+```bash
+pip install pandas scikit-learn xgboost
+python homework6.py
+```
 
-10
-15
-20
-25
-Question 5
-We can extract feature importance information from tree-based models.
+`homework6.py` runs every question and prints the results.
 
-At each step of the decision tree learning algorithm, it finds the best split. When doing it, we can calculate "gain" - the reduction in impurity before and after the split. This gain is quite useful in understanding what are the important features for tree-based models.
+## Data preparation
 
-In Scikit-Learn, tree-based models contain this information in the feature_importances_ field.
+- Missing values filled with `0`.
+- 60/20/20 train/validation/test split, using the exact calls from the assignment (`random_state=1`).
+- Features converted with `DictVectorizer(sparse=True)`, fitted on the training set only to avoid leakage.
+- Original column names recovered from the one-hot features (for example `origin=USA` maps to `origin`).
 
-For this homework question, we'll find the most important feature:
+## Results
 
-Train the model with these parameters:
-n_estimators=10,
-max_depth=20,
-random_state=1,
-n_jobs=-1 (optional)
-Get the feature importance information from this model
-What's the most important feature (among these 4)?
+| Q | Task | Answer |
+|---|------|--------|
+| 1 | Feature used by a depth-1 decision tree | `model_year` |
+| 2 | Random forest (10 trees) validation RMSE | 1.837 (closest option; my run gave 1.833) |
+| 3 | Best `n_estimators` from 10, 50, 100, 150 | 150 on my machine (100 and 150 are within 0.001) |
+| 4 | Best `max_depth` by mean RMSE | 10 |
+| 5 | Most important feature among the 4 | `vehicle_weight` |
+| 6 | Best XGBoost `eta` | 0.1 |
 
-vehicle_weight
-horsepower
-acceleration
-engine_displacement
-Question 6
-Now let's train an XGBoost model! For this question, we'll tune the eta parameter:
+## Reasoning
 
-Install XGBoost
-Create DMatrix for train and validation
-Create a watchlist
-Train a model with these parameters for 100 rounds:
-xgb_params = {
-    'eta': 0.3, 
-    'max_depth': 6,
-    'min_child_weight': 1,
-    
-    'objective': 'reg:squarederror',
-    'nthread': 8,
-    
-    'seed': 1,
-    'verbosity': 1,
-}
-Now change eta from 0.3 to 0.1.
+**Q1: Root split of a depth-1 tree.** A depth-1 tree has a single split. `tree_.feature[0]` gives the column it chose, and splitting the name on `=` maps one-hot columns back to the original feature. The tree splits on `model_year`.
 
-Which eta leads to the best RMSE score on the validation dataset?
+**Q2: Random forest baseline.** A forest of 10 trees (`random_state=1`) gives a validation RMSE of about 1.83, meaning predictions are off by roughly 1.8 mpg on average.
 
-0.3
-0.1
-Both give equal value
+**Q3: Number of trees.** RMSE drops sharply from 10 to 50 trees as averaging reduces variance, then flattens. The values at 100 and 150 trees differ by only about 0.001, so the winner can change with library version. The lowest value in my run was at 150 trees (1.769).
+
+**Q4: Tree depth.** For each `max_depth` in [10, 15, 20, 25] I averaged RMSE over `n_estimators` in [10, 50, 100, 150], so one lucky tree count cannot decide the result. Depth 10 had the lowest mean RMSE (about 1.755), while 15, 20 and 25 were all around 1.78 to 1.79. Shallower trees generalized better, and deeper ones overfit.
+
+**Q5: Feature importance.** `feature_importances_` sums each feature's impurity reduction across all splits and trees. Among the four candidates, `vehicle_weight` (about 0.20) clearly beat `horsepower`, `engine_displacement` and `acceleration`. This fits the physics, since heavier cars burn more fuel.
+
+**Q6: XGBoost learning rate.** `eta` scales each tree's contribution. With `eta=0.3` the model learns quickly, reaches its best validation RMSE (1.732) around round 10, then overfits and ends at 1.826. With `eta=0.1` it learns more slowly, reaching a best of 1.712 around round 39 and ending at 1.725. Lower `eta` wins on both the final and the best score.
+
+## Notes
+
+- Small differences in RMSE (in the third decimal) can appear between machines because of scikit-learn and pandas versions, so the numbers above are from one environment.
+- Q3 is the most sensitive to this, as the top two candidates are very close.
+
 
